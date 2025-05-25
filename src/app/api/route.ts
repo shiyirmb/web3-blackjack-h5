@@ -3,7 +3,6 @@ import {
     DynamoDBDocumentClient, 
     PutCommand, 
     GetCommand,
-    UpdateCommand
 } from "@aws-sdk/lib-dynamodb";
 import { verifyMessage } from "viem";
 import jwt from 'jsonwebtoken'
@@ -167,16 +166,15 @@ export async function GET(request: Request) {
     const playerCardsTotal = calculateCardsTotal(gameState.playerHand)
     const dealerCardsTotal = calculateCardsTotal(gameState.dealerHand)
     if (playerCardsTotal === 21 && dealerCardsTotal === 21) {
-      gameState.message = 'draw'
+      gameState.message = '平牌'
     } else if (playerCardsTotal === 21) {
-      gameState.message = "Player win, Black jack"
-      console.log(gameState.message)
+      gameState.message = "玩家赢, 二十一点"
       await writeScore(address, 100);
     } else if (dealerCardsTotal === 21) {
-      gameState.message = "Player lose, Dealer black jack"
-      console.log(gameState.message)
+      gameState.message = "玩家输, 庄家二十一点"
       await writeScore(address, -100)
     }
+    console.log(gameState)
     return sendSuccessDataToFront(address)
   } catch (error) {
     console.error("读取分数出错:", error)
@@ -187,6 +185,11 @@ export async function GET(request: Request) {
 // 叫牌/停牌/签名校验
 export async function POST(request: Request) {
   const { action, address, message, signature } = await request.json()
+  if (action === 'nft') {
+    console.log('获取到NFT，减去相应的分数')
+    await writeScore(address, -100)
+    return sendSuccessDataToFront(address)
+  }
   if (action === 'auth') {
     console.log('进入签名校验逻辑')
     const isValid = await verifyMessage({ address, message, signature })
@@ -196,7 +199,7 @@ export async function POST(request: Request) {
     } else {
       const token = jwt.sign({ address }, process.env.JWT_SECRET || '', { expiresIn: "1h" })
       return new Response(JSON.stringify({
-        message: 'Valid signature',
+        message: '签名成功',
         jsonwebtoken: token,
       }), { status: 200 })
     }
@@ -225,14 +228,13 @@ export async function POST(request: Request) {
     gameState.cards = remainingCards
     const playerCardsTotal = calculateCardsTotal(gameState.playerHand)
     if (playerCardsTotal > 21) {
-      gameState.message = "Player lose, Bust"
-      console.log(gameState.message)
+      gameState.message = "玩家输, 爆牌"
       await writeScore(address, -100)
     } else if (playerCardsTotal === 21) {
-      gameState.message = "Player win, Black jack"
-      console.log(gameState.message)
+      gameState.message = "玩家赢, 二十一点"
       await writeScore(address, 100)
     }
+    console.log(gameState)
     return sendSuccessDataToFront(address)
   }
   if (action === 'stand') {
@@ -253,28 +255,24 @@ export async function POST(request: Request) {
     }
     const dealerCardsTotal = calculateCardsTotal(gameState.dealerHand)
     if (dealerCardsTotal > 21) {
-      gameState.message = "Player win, Dealer bust"
-      console.log(gameState.message)
+      gameState.message = "玩家赢, 庄家爆牌"
       await writeScore(address, 100)
     } else if (dealerCardsTotal === 21) {
-      gameState.message = "Player lose, Dealer black jack"
-      console.log(gameState.message)
+      gameState.message = "玩家输, 庄家二十一点"
       await writeScore(address, -100)
     } else {
       const playerCardsTotal = calculateCardsTotal(gameState.playerHand)
       if (dealerCardsTotal > playerCardsTotal) {
-        gameState.message = "Player lose"
-        console.log(gameState.message)
+        gameState.message = "玩家输"
         await writeScore(address, -100)
       } else if (dealerCardsTotal < playerCardsTotal) {
-        gameState.message = "Player win"
-        console.log(gameState.message)
+        gameState.message = "玩家赢"
         await writeScore(address, 100)
       } else {
-        gameState.message = "draw"
-        console.log(gameState.message)
+        gameState.message = "平牌"
       }
     }
+    console.log(gameState)
     return sendSuccessDataToFront(address)
   }
   return sendErrorDataToFront('Invalid action.', 400)

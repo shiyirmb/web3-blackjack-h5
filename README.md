@@ -20,7 +20,7 @@
 - 当玩家获取NFT时进行NFT的铸造
 
 ## 项目启动
-- git clone https://github.com/shiyirmb/web3-blackjack.git
+- git clone https://github.com/shiyirmb/web3-blackjack-h5.git
 - cd web3-blackjack
 - pnpm install
 - 配置你的.env.local信息，参考.env.example文件

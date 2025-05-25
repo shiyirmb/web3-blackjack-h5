@@ -43,6 +43,9 @@ export default function App() {
       setIsMinting(false); // writeContract 成功, 交易已确认
       setMessage('恭喜获得NFT！');
       setImgSrc("https://stuck-blush-sheep.myfilebase.com/ipfs/QmfMKjvaVwzKe76Ru2d83syiHQNBv3NKxTHpBVeCPNrWFL");
+      handleApiCall('nft', { action: 'nft', type: 1 }).then(data => {
+        setScore(data?.score || 0);
+      });
     }
   }, [isConfirmed, writeData]);
 
@@ -70,7 +73,9 @@ export default function App() {
 
   async function handleApiCall(action: string, bodyData?: object) {
     setIsGameActionLoading(true);
-    setMessage(''); 
+    if (action != 'nft') {
+      setMessage('数据请求中...'); 
+    }
     try {
       const response = await fetch('/api', {
         method: bodyData ? 'POST' : 'GET',
@@ -118,32 +123,22 @@ export default function App() {
   }
 
   async function initGame() {
-    // Try POST first for new game, then GET as fallback or for existing game state
-    const data = await handleApiCall('initGame', { action: 'deal' });
-    if (data) {
-        setPlayerHand(data.playerHand);
-        setDealerHand(data.dealerHand);
-        setMessage(data.message || '游戏开始！');
-        setScore(data.score);
-        setImgSrc(''); // Reset image on new game
+    setMessage('数据请求中...')
+    const getResponse = await fetch(`/api?address=${address}`, { 
+        method: 'GET', 
+        headers: { bearer: `Bearer ${sessionStorage.getItem('jwt') || ''}` } 
+    });
+    if (getResponse.ok) {
+        const getData = await getResponse.json();
+        setPlayerHand(getData.playerHand);
+        setDealerHand(getData.dealerHand);
+        setMessage(getData.message || '游戏开始！');
+        setScore(getData.score);
+        setImgSrc('');
     } else {
-        // Fallback if POST fails or doesn't return full state
-        const getResponse = await fetch(`/api?address=${address}`, { 
-            method: 'GET', 
-            headers: { bearer: `Bearer ${sessionStorage.getItem('jwt') || ''}` } 
-        });
-        if (getResponse.ok) {
-            const getData = await getResponse.json();
-            setPlayerHand(getData.playerHand);
-            setDealerHand(getData.dealerHand);
-            setMessage(getData.message || '游戏开始！');
-            setScore(getData.score);
-            setImgSrc('');
-        } else {
-             setMessage('开始游戏失败，请检查网络或刷新重试。');
-        }
-        setIsGameActionLoading(false); // ensure loading state is reset
+          setMessage('开始游戏失败，请检查网络或刷新重试。');
     }
+    setIsGameActionLoading(false);
   }
 
 
@@ -185,7 +180,7 @@ export default function App() {
       return;
     }
     setIsMinting(true); 
-    setMessage('正在提交NFT铸造请求...');
+    setMessage('NFT铸造中，请稍候...');
     try {
       await writeContract({
         abi: BLACKJACK_NFT_ABI,
@@ -206,8 +201,9 @@ export default function App() {
     }
   }
 
-  const renderCard = (card: Card, index: number, isDealerHiddenCard?: boolean) => {
-    if (isDealerHiddenCard && index === 0 && dealerHand.length > 1 && (message === '' || message.includes('你的回合') || message.includes('游戏开始'))) {
+  const renderCard = (card: Card, index: number, isDealer?: boolean) => {
+    // 庄家第二张牌为暗牌
+    if (isDealer && index === 1 && dealerHand.length > 1 && (message === '' || message.includes('你的回合') || message.includes('游戏开始'))) {
       return (
         <div 
           key={`hidden-${index}`}
@@ -217,7 +213,7 @@ export default function App() {
         </div>
       );
     }
-
+  
     const { symbol, colorClass } = getSuitAppearance(card.suit);
     return (
       <div 
@@ -226,14 +222,14 @@ export default function App() {
       >
         <div className={`text-lg sm:text-xl font-bold self-start ${colorClass}`}>{card.rank}</div>
         <div className={`text-3xl sm:text-4xl self-center ${colorClass}`}>{symbol}</div>
-        <div className={`text-lg sm:text-xl font-bold self-end rotate-180 ${colorClass}`}>{card.rank}</div>
+        <div className={`text-lg sm:text-xl font-bold self-end ${colorClass} rotate-0`}>{card.rank}</div>
       </div>
     );
   };
 
   const getMessageClass = () => {
-    if (message.includes('win') || message.includes('恭喜')) return 'text-green-700 bg-green-100 dark:bg-green-700 dark:text-green-100 border-green-300 dark:border-green-600';
-    if (message.includes('lose') || message.includes('爆牌') || message.includes('失败')) return 'text-red-700 bg-red-100 dark:bg-red-700 dark:text-red-100 border-red-300 dark:border-red-600';
+    if (message.includes('赢') || message.includes('恭喜')) return 'text-green-700 bg-green-100 dark:bg-green-700 dark:text-green-100 border-green-300 dark:border-green-600';
+    if (message.includes('输') || message.includes('失败')) return 'text-red-700 bg-red-100 dark:bg-red-700 dark:text-red-100 border-red-300 dark:border-red-600';
     if (message.includes('平局')) return 'text-yellow-700 bg-yellow-100 dark:bg-yellow-700 dark:text-yellow-100 border-yellow-300 dark:border-yellow-600';
     return 'text-blue-700 bg-blue-100 dark:bg-blue-700 dark:text-blue-100 border-blue-300 dark:border-blue-600';
   };
@@ -255,7 +251,12 @@ export default function App() {
             disabled={isGameActionLoading}
             className="px-6 py-3 sm:px-8 sm:py-3 bg-gradient-to-r from-sky-500 to-cyan-500 text-white font-semibold rounded-lg shadow-md hover:from-sky-600 hover:to-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-300 dark:focus:ring-cyan-700 focus:ring-opacity-75 transition-all duration-200 ease-in-out transform hover:scale-105 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center space-x-2 text-sm sm:text-base"
           >
-            {isGameActionLoading ? <Spinner color="border-white" /> : <span>使用钱包签名开始游戏</span>}
+            {isGameActionLoading ?  (
+              <div className="flex items-center justify-center">
+                <Spinner color="border-white" />
+                <span>签名中，请稍候…</span>
+              </div>
+            ) : <span>使用钱包签名开始游戏</span>}
           </button>
         )}
          {message && <p className={`mt-4 text-base sm:text-lg p-3 rounded-md border ${getMessageClass()} w-full max-w-md text-center`}>{message}</p>}
@@ -266,21 +267,21 @@ export default function App() {
   const gameInProgress = message === '' || message === '游戏开始！' || message.includes('叫牌') || message.includes('等待') || message.includes('你的回合');
 
   return (
-    <div className="flex flex-col items-center min-h-screen bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 p-4 pt-6 sm:pt-8 space-y-4 sm:space-y-6">
+    <div className="flex flex-col items-center min-h-screen bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 p-4 pt-[65px] sm:pt-8 space-y-4 sm:space-y-6">
       <div className="absolute top-4 right-4 z-50">
         <ConnectButton />
       </div>
       
       <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-gray-800 dark:text-gray-100">Web3 Blackjack</h1>
       
-      <div className={`text-lg sm:text-xl font-semibold p-3 rounded-md border min-h-[3em] flex items-center justify-center text-center w-full max-w-md ${getMessageClass()}`}>
-        {message || `分数: ${score}`}
-      </div>
-      
-      { (score > 0 && !(message && (message.includes("游戏开始") || gameInProgress || message.includes("爆牌") || message.includes("输") || message.includes("lose") || message.includes("平局") ))) && (
-         <p className="text-lg sm:text-xl font-medium text-gray-700 dark:text-gray-300">分数: {score}</p>
-      )}
-
+      {
+        message && (
+          <div className={`text-lg sm:text-xl font-semibold p-3 rounded-md border min-h-[3em] flex items-center justify-center text-center w-full max-w-md ${getMessageClass()}`}>
+            {message}
+          </div>
+        )
+      }
+      <p className="text-lg sm:text-xl font-medium text-gray-700 dark:text-gray-300">当前分数: {score}</p>
       {score >= 1000 && !imgSrc && (
         <div className="flex flex-col items-center gap-2 my-2 sm:my-4">
           <button 
@@ -292,10 +293,7 @@ export default function App() {
             onClick={getNFT}
             disabled={isMinting || isConfirming || isGameActionLoading}
           >
-            {(isMinting || isConfirming) ? <Spinner color="border-white" /> : null}
-            <span>
-              {isMinting ? '提交交易中...' : isConfirming ? '等待网络确认...' : '获取NFT资格徽章!'}
-            </span>
+            <span>{isMinting ? '提交交易中...' : isConfirming ? '等待网络确认...' : '获取NFT资格徽章!'}</span>
           </button>
         </div>
       )}
@@ -311,7 +309,7 @@ export default function App() {
       <div className="w-full max-w-md sm:max-w-2xl">
         <h2 className="text-xl sm:text-2xl font-semibold mb-2 sm:mb-3 text-center text-gray-700 dark:text-gray-200">庄家手牌</h2>
         <div className="flex flex-row gap-2 sm:gap-3 justify-center items-center min-h-[8rem] sm:min-h-[10rem] bg-gray-100 dark:bg-gray-700 p-3 sm:p-4 rounded-lg shadow-inner">
-          {dealerHand.length > 0 ? dealerHand.map((card, index) => renderCard(card, index, true)) : <p className="text-gray-500 dark:text-gray-400">等待庄家亮牌...</p>}
+          {dealerHand.length > 0 ? dealerHand.map((card, index) => renderCard(card, index, true)) : <p className="text-gray-500 dark:text-gray-400">等待发牌...</p>}
         </div>
       </div>
 
@@ -332,14 +330,22 @@ export default function App() {
               onClick={handleHit}
               disabled={isGameActionLoading || isMinting || isConfirming}
             >
-              {isGameActionLoading && message.toLowerCase().includes("hit") ? <Spinner size="w-4 h-4" color="border-white" /> : null} <span>叫牌</span>
+              {isGameActionLoading && message.toLowerCase().includes("hit") ? 
+                <div className="flex items-center justify-center">
+                  <Spinner color="border-white" />
+                  <span>操作中…</span>
+                </div> : null} <span>叫牌</span>
             </button>
             <button 
               className="px-6 py-2.5 sm:px-8 sm:py-3 bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-blue-300 dark:focus:ring-blue-500 focus:ring-opacity-75 transition-all duration-150 ease-in-out transform hover:scale-105 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center space-x-2 text-sm sm:text-base"
               onClick={handleStand}
               disabled={isGameActionLoading || isMinting || isConfirming}
             >
-              {isGameActionLoading && message.toLowerCase().includes("stand") ? <Spinner size="w-4 h-4" color="border-white" /> : null} <span>停牌</span>
+              {isGameActionLoading && message.toLowerCase().includes("stand") ? 
+              <div className="flex items-center justify-center">
+                <Spinner color="border-white" />
+                <span>操作中…</span>
+              </div> : null} <span>停牌</span>
             </button>
           </>
         ) : (
@@ -348,7 +354,11 @@ export default function App() {
             onClick={initGame}
             disabled={isGameActionLoading || isMinting || isConfirming}
           >
-           {isGameActionLoading && message.toLowerCase().includes("reset") ? <Spinner size="w-4 h-4" color="border-white" /> : null} <span>重新开始</span>
+           {isGameActionLoading && message.toLowerCase().includes("reset") ? 
+              <div className="flex items-center justify-center">
+                <Spinner color="border-white" />
+                <span>操作中…</span>
+              </div> : null} <span>重新开始</span>
           </button>
         )}
       </div>
