@@ -242,7 +242,7 @@ export default function App() {
     return (
       <div className="flex flex-col gap-6 items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 p-4">
         <h1 className="text-4xl sm:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-600 mb-4 sm:mb-8 text-center">
-          Web3 Blackjack Deluxe
+          Web3 Blackjack NFT
         </h1>
         <ConnectButton />
         {isConnected && (
